@@ -7,6 +7,7 @@ var imagename = "img";
 var mountpoint = process.argv[3];
 console.log(srcroot, mountpoint);
 
+// var blocksize = 1024 * 1024;
 var blocksize = 4096;
 
 var errnoMap = {
@@ -58,71 +59,93 @@ function open(path, flags, callback) {
 }
 
 function read(pth, offset, len, buf, _, callback) {
-  // if (pth !== "/" + imagename) return callback(errnoMap.ENOENT);
-  // var blockid = Math.floor(offset / blocksize);
-  // var bufoffset = 0;
-  // offset %= blocksize;
-  // (function recur(blockid, len, bufoffset, offset) {
-  //   if (len <= 0) {
-  //     console.log("done");
-  //     callback(0);
-  //     return;
-  //   }
-  //   var readlength = Math.min(len, blocksize);
-  //   fs.open(path.join(srcroot, ""+blockid), "r", function (err, fd) {
-  //     if (err) {
-  //       callback(errnoMap.EINVAL);
-  //       return;
-  //     }
-  //     fs.read(fd, buf, bufoffset, readlength, offset, function (err) {
-  //       fs.close(fd, function () {
-  //         console.log(blockid);
-  //         // process.stdout.write(buf.slice(bufoffset, bufoffset + readlength), "utf8");
-  //         if (err) {
-  //           callback(errnoMap.EINVAL);
-  //           return;
-  //         }
-  //         recur(blockid + 1, len - readlength, bufoffset + readlength, 0);
-  //       });
-  //     });
-  //   });
-  // }(blockid, len, bufoffset, offset));
   if (pth !== "/" + imagename) return callback(errnoMap.ENOENT);
-  console.log("read");
-  for (var i = 0; i < len; i++) buf[i] = "@".charCodeAt(0);
-  callback(len);
+  var blockid = Math.floor(offset / blocksize);
+  var bufoffset = 0;
+  offset %= blocksize;
+  (function recur(blockid, len, bufoffset, offset) {
+    if (len <= 0) {
+      console.log("done");
+      callback(bufoffset);
+      return;
+    }
+    var readlength = Math.min(len, blocksize);
+    fs.open(path.join(srcroot, ""+blockid), "r", function (err, fd) {
+      if (err) {
+        callback(bufoffset);
+        return;
+      }
+      fs.read(fd, buf, bufoffset, readlength, offset, function (err) {
+        fs.close(fd, function () {
+          console.log(blockid);
+          // process.stdout.write(buf.slice(bufoffset, bufoffset + readlength), "utf8");
+          if (err) {
+            callback(bufoffset);
+            return;
+          }
+          recur(blockid + 1, len - readlength, bufoffset + readlength, 0);
+        });
+      });
+    });
+  }(blockid, len, bufoffset, offset));
+  // if (pth !== "/" + imagename) return callback(errnoMap.ENOENT);
+  // console.log("read");
+  // for (var i = 0; i < len; i++) buf[i] = "@".charCodeAt(0);
+  // callback(len);
   // var blockid = Math.floor(offset / blocksize);
   // var bufoffset = 0;
   // offset %= blocksize;
   // while (len > 0) {
   //   console.log(blockid);
   //   var readlen = Math.min(len, blocksize);
-  //   var fd = fs.openSync(path.join(srcroot, ""+blockid), "r");
-  //   fs.readSync(fd, buf, bufoffset, readlen, offset);
-  //   fs.closeSync(fd);
+  //   try {
+  //     var fd = fs.openSync(path.join(srcroot, ""+blockid), "r");
+  //     fs.readSync(fd, buf, bufoffset, readlen, offset);
+  //     fs.closeSync(fd);
+  //   } catch (e) {
+  //     callback(bufoffset);
+  //     return;
+  //   }
   //   // process.stdout.write(buf.slice(bufoffset, bufoffset+readlen), "utf8");
   //   len -= readlen;
   //   blockid++;
   //   offset = 0;
   //   bufoffset += readlen;
   // }
-  // callback(0);
+  // callback(bufoffset);
 }
 
 function write(path, offset, len, buf, _, callback) {
   console.log("write");
-  if (path !== "/" + imagename) return callback(errnoMap.ENOENT);
+  if (pth !== "/" + imagename) return callback(errnoMap.ENOENT);
   var blockid = Math.floor(offset / blocksize);
   var bufoffset = 0;
   offset %= blocksize;
-  while (len > 0) {
-    var writelen = Math.min(len, blocksize);
-    var fd = fs.openSync(path.join(srcroot, blockid), "r+");
-    fs.writeSync(fd, buf, bufoffset, readlength, offset);
-    len -= writelen;
-    blockid++;
-  }
-  callback(0);
+  (function recur(blockid, len, bufoffset, offset) {
+    if (len <= 0) {
+      console.log("done");
+      callback(bufoffset);
+      return;
+    }
+    var readlength = Math.min(len, blocksize);
+    fs.open(path.join(srcroot, ""+blockid), "r+", function (err, fd) {
+      if (err) {
+        callback(bufoffset);
+        return;
+      }
+      fs.write(fd, buf, bufoffset, readlength, offset, function (err) {
+        fs.close(fd, function () {
+          console.log(blockid);
+          // process.stdout.write(buf.slice(bufoffset, bufoffset + readlength), "utf8");
+          if (err) {
+            callback(bufoffset);
+            return;
+          }
+          recur(blockid + 1, len - readlength, bufoffset + readlength, 0);
+        });
+      });
+    });
+  }(blockid, len, bufoffset, offset));
 }
 
 function release(_1, _2, callback) {
